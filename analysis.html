@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>详细分析报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #ff9800;
+            padding-bottom: 15px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .back-link:hover {
+            background-color: #45a049;
+        }
+        .analysis-section {
+            margin-bottom: 40px;
+        }
+        .analysis-section h3 {
+            color: #333;
+            border-bottom: 2px solid #ff9800;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .positive { color: #28a745; font-weight: bold; }
+        .negative { color: #dc3545; font-weight: bold; }
+        .chart-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        .chart-box {
+            background-color: #f8f8f8;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-box h4 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.2em;
+            flex-shrink: 0;
+        }
+        .chart-wrapper {
+            flex: 1;
+            position: relative;
+        }
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+            font-size: 1.2em;
+        }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+        #confusion-matrix {
+            border: 2px solid #333;
+        }
+        #confusion-matrix th, #confusion-matrix td {
+            border: 1px solid #333;
+            text-align: center;
+        }
+        .tp { background-color: #d4edda; }
+        .tn { background-color: #d4edda; }
+        .fp { background-color: #f8d7da; }
+        .fn { background-color: #f8d7da; }
+        .correlation-matrix {
+            font-size: 0.9em;
+        }
+        .correlation-matrix th, .correlation-matrix td {
+            text-align: center;
+            padding: 8px;
+            min-width: 60px;
+        }
+        .correlation-value {
+            padding: 5px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                grid-template-columns: 1fr;
+            }
+            .chart-box {
+                height: 500px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← 返回首页</a>
+        
+        <h1>逻辑回归模型详细分析报告</h1>
+        
+        <div id="no-data" class="no-data" style="display: none;">
+            <p>未找到训练结果数据</p>
+            <p>请先在首页完成模型训练，然后再查看分析报告</p>
+            <a href="/" class="back-link">返回首页进行训练</a>
+        </div>
+        
+        <div id="content" style="display: none;">
+            <div class="analysis-section">
+                <h3>模型权重分析</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>特征名称</th>
+                            <th>权重值</th>
+                        </tr>
+                    </thead>
+                    <tbody id="weights-table-body">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="analysis-section">
+                <h3>特征间相似度矩阵</h3>
+                <table id="correlation-matrix" class="correlation-matrix">
+                    <thead id="correlation-matrix-head">
+                    </thead>
+                    <tbody id="correlation-matrix-body">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="analysis-section">
+                <h3>混淆矩阵</h3>
+                <div id="confusion-matrix-container">
+                    <table id="confusion-matrix" style="margin: 20px auto; text-align: center;">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="vertical-align: middle;">实际值</th>
+                                <th colspan="2">预测值</th>
+                            </tr>
+                            <tr>
+                                <th>0 (未生存)</th>
+                                <th>1 (生存)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="confusion-matrix-body">
+                        </tbody>
+                    </table>
+                    
+                    <table id="metrics-table" style="margin-top: 30px;">
+                        <thead>
+                            <tr>
+                                <th>性能指标</th>
+                                <th>数值</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="age-analysis-section" class="analysis-section" style="display: none;">
+                <h3>年龄组预测分析</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>年龄组</th>
+                            <th>样本数</th>
+                            <th>实际生存率(%)</th>
+                            <th>预测生存率(%)</th>
+                            <th>预测差异(%)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="age-table-body">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="analysis-section">
+                <h3>训练过程可视化</h3>
+                <div class="chart-container">
+                    <div class="chart-box">
+                        <h4>各特征权重随训练步数的变化</h4>
+                        <div class="chart-wrapper">
+                            <canvas id="weight-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-box">
+                        <h4>训练损失随轮数的收敛过程</h4>
+                        <div class="chart-wrapper">
+                            <canvas id="loss-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="analysis-section">
+                <h3>模型性能总结</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>指标</th>
+                            <th>数值</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summary-table-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let trainingResults = null;
+
+        window.addEventListener('load', function() {
+            loadTrainingResults();
+        });
+
+        function loadTrainingResults() {
+            try {
+                const resultsJson = sessionStorage.getItem('trainingResults');
+                
+                if (!resultsJson) {
+                    showNoData();
+                    return;
+                }
+                
+                trainingResults = JSON.parse(resultsJson);
+                
+                if (!trainingResults || !trainingResults.weight_history) {
+                    showNoData();
+                    return;
+                }
+                
+                document.getElementById('content').style.display = 'block';
+                populateWeightsTable();
+                populateAgeAnalysis();
+                populatePerformanceSummary();
+                calculateCorrelationMatrix();
+                
+                setTimeout(() => {
+                    drawCharts();
+                }, 300);
+                
+            } catch (error) {
+                console.error('加载训练结果时出错:', error);
+                showError('数据加载失败: ' + error.message);
+            }
+        }
+
+        function showNoData() {
+            document.getElementById('no-data').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+        }
+
+        function showError(message) {
+            const container = document.querySelector('.container');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            container.insertBefore(errorDiv, container.firstChild.nextSibling);
+        }
+
+        function populateWeightsTable() {
+            const tbody = document.getElementById('weights-table-body');
+            tbody.innerHTML = '';
+            
+            const finalWeights = trainingResults.weight_history[trainingResults.weight_history.length - 1];
+            const featureNames = trainingResults.feature_names || [];
+            
+            finalWeights.forEach((weight, index) => {
+                const row = tbody.insertRow();
+                const featureName = featureNames[index] || ('特征 ' + index);
+                
+                row.insertCell(0).textContent = featureName;
+                row.insertCell(1).textContent = weight.toFixed(6);
+            });
+        }
+
+        function calculateCorrelationMatrix() {
+            if (!trainingResults.test_features) {
+                const tbody = document.getElementById('correlation-matrix-body');
+                tbody.innerHTML = '';
+                const noteRow = tbody.insertRow();
+                noteRow.insertCell(0).textContent = '数据缺失';
+                noteRow.insertCell(1).textContent = '需要测试集特征数据';
+                return;
+            }
+            
+            const testFeatures = trainingResults.test_features;
+            const featureNames = trainingResults.feature_names || [];
+            const numFeatures = testFeatures.length;
+            
+            // 创建表头
+            const thead = document.getElementById('correlation-matrix-head');
+            thead.innerHTML = '';
+            const headerRow = thead.insertRow();
+            headerRow.insertCell(0).textContent = '';
+            
+            featureNames.forEach(name => {
+                const cell = headerRow.insertCell();
+                cell.textContent = name;
+                cell.style.fontWeight = 'bold';
+            });
+            
+            // 计算相关性矩阵
+            const tbody = document.getElementById('correlation-matrix-body');
+            tbody.innerHTML = '';
+            
+            for (let i = 0; i < numFeatures; i++) {
+                const row = tbody.insertRow();
+                const nameCell = row.insertCell(0);
+                nameCell.textContent = featureNames[i] || ('特征 ' + i);
+                nameCell.style.fontWeight = 'bold';
+                
+                for (let j = 0; j < numFeatures; j++) {
+                    const correlation = cosineSimilarity(testFeatures[i], testFeatures[j]);
+                    const cell = row.insertCell();
+                    cell.textContent = correlation.toFixed(4);
+                    
+                    // 根据相关性添加颜色
+                    const absCorr = Math.abs(correlation);
+                    if (absCorr > 0.8) {
+                        cell.style.backgroundColor = '#ff6b6b';
+                        cell.style.color = 'white';
+                    } else if (absCorr > 0.6) {
+                        cell.style.backgroundColor = '#ffd93d';
+                    } else if (absCorr > 0.4) {
+                        cell.style.backgroundColor = '#6bcf7f';
+                    } else {
+                        cell.style.backgroundColor = '#74c0fc';
+                    }
+                    
+                    if (i === j) {
+                        cell.style.backgroundColor = '#495057';
+                        cell.style.color = 'white';
+                        cell.style.fontWeight = 'bold';
+                    }
+                }
+            }
+            
+            if (trainingResults.test_labels) {
+                showConfusionMatrix();
+            }
+        }
+
+        function showConfusionMatrix() {
+            const testLabels = trainingResults.test_labels;
+            const testPredictions = trainingResults.test_predictions;
+            
+            let tp = 0, tn = 0, fp = 0, fn = 0;
+            
+            for (let i = 0; i < testLabels.length; i++) {
+                const actual = testLabels[i];
+                const predicted = testPredictions[i];
+                
+                if (actual === 1 && predicted === 1) tp++;
+                else if (actual === 0 && predicted === 0) tn++;
+                else if (actual === 0 && predicted === 1) fp++;
+                else if (actual === 1 && predicted === 0) fn++;
+            }
+            
+            const matrixBody = document.getElementById('confusion-matrix-body');
+            matrixBody.innerHTML = '';
+            
+            const row1 = matrixBody.insertRow();
+            const cell1_0 = row1.insertCell(0);
+            cell1_0.textContent = '0 (未生存)';
+            cell1_0.style.fontWeight = 'bold';
+            
+            const cell1_1 = row1.insertCell(1);
+            cell1_1.textContent = tn;
+            cell1_1.className = 'tn';
+            
+            const cell1_2 = row1.insertCell(2);
+            cell1_2.textContent = fp;
+            cell1_2.className = 'fp';
+            
+            const row2 = matrixBody.insertRow();
+            const cell2_0 = row2.insertCell(0);
+            cell2_0.textContent = '1 (生存)';
+            cell2_0.style.fontWeight = 'bold';
+            
+            const cell2_1 = row2.insertCell(1);
+            cell2_1.textContent = fn;
+            cell2_1.className = 'fn';
+            
+            const cell2_2 = row2.insertCell(2);
+            cell2_2.textContent = tp;
+            cell2_2.className = 'tp';
+            
+            const precision = tp / (tp + fp) || 0;
+            const recall = tp / (tp + fn) || 0;
+            const f1Score = 2 * (precision * recall) / (precision + recall) || 0;
+            const specificity = tn / (tn + fp) || 0;
+            
+            const metricsBody = document.getElementById('metrics-table-body');
+            metricsBody.innerHTML = '';
+            
+            const metrics = [
+                ['精确率 (Precision)', (precision * 100).toFixed(2) + '%', '预测为正例中实际为正例的比例'],
+                ['召回率 (Recall)', (recall * 100).toFixed(2) + '%', '实际正例中被正确预测的比例'],
+                ['F1分数', f1Score.toFixed(4), '精确率和召回率的调和平均'],
+                ['特异性 (Specificity)', (specificity * 100).toFixed(2) + '%', '实际负例中被正确预测的比例'],
+                ['真正例 (TP)', tp.toString(), '预测为生存且实际生存'],
+                ['真负例 (TN)', tn.toString(), '预测为未生存且实际未生存'],
+                ['假正例 (FP)', fp.toString(), '预测为生存但实际未生存'],
+                ['假负例 (FN)', fn.toString(), '预测为未生存但实际生存']
+            ];
+            
+            metrics.forEach(metric => {
+                const row = metricsBody.insertRow();
+                row.insertCell(0).textContent = metric[0];
+                row.insertCell(1).textContent = metric[1];
+                row.insertCell(2).textContent = metric[2];
+            });
+        }
+
+        function populateAgeAnalysis() {
+            if (!trainingResults.age_group_analysis || trainingResults.age_group_analysis.length === 0) {
+                return;
+            }
+            
+            document.getElementById('age-analysis-section').style.display = 'block';
+            const tbody = document.getElementById('age-table-body');
+            tbody.innerHTML = '';
+            
+            trainingResults.age_group_analysis.forEach(group => {
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = group.age_group;
+                row.insertCell(1).textContent = group.sample_count;
+                row.insertCell(2).textContent = group.actual_survival_rate.toFixed(2);
+                row.insertCell(3).textContent = group.predicted_survival_rate.toFixed(2);
+                
+                const diffCell = row.insertCell(4);
+                const diffSign = group.difference_rate >= 0 ? '+' : '';
+                diffCell.textContent = diffSign + group.difference_rate.toFixed(2);
+                diffCell.className = group.difference_rate >= 0 ? 'positive' : 'negative';
+            });
+        }
+
+        function populatePerformanceSummary() {
+            const tbody = document.getElementById('summary-table-body');
+            tbody.innerHTML = '';
+            
+            const summaryData = [
+                ['训练集准确率', (trainingResults.train_accuracy * 100).toFixed(2) + '%'],
+                ['测试集准确率', (trainingResults.test_accuracy * 100).toFixed(2) + '%'],
+                ['总训练轮数', trainingResults.loss_history ? trainingResults.loss_history.length : 'N/A'],
+                ['最终损失值', trainingResults.loss_history ? trainingResults.loss_history[trainingResults.loss_history.length - 1].toFixed(6) : 'N/A'],
+                ['权重参数数量', trainingResults.weight_history ? trainingResults.weight_history[0].length : 'N/A']
+            ];
+            
+            summaryData.forEach(item => {
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = item[0];
+                row.insertCell(1).textContent = item[1];
+            });
+        }
+
+        function drawCharts() {
+            try {
+                drawWeightChart();
+                drawLossChart();
+            } catch (error) {
+                console.error('绘制图表时出错:', error);
+                showError('图表绘制失败: ' + error.message);
+            }
+        }
+
+        function drawWeightChart() {
+            const ctx = document.getElementById('weight-chart').getContext('2d');
+            const numWeights = trainingResults.weight_history[0].length;
+            const featureNames = trainingResults.feature_names || [];
+            const datasets = [];
+            
+            for (let i = 0; i < numWeights; i++) {
+                const featureName = featureNames[i] || ('特征 ' + i);
+                datasets.push({
+                    label: featureName,
+                    data: trainingResults.weight_history.map(weights => weights[i]),
+                    borderColor: 'hsl(' + (i * 360 / numWeights) + ', 70%, 50%)',
+                    backgroundColor: 'hsla(' + (i * 360 / numWeights) + ', 70%, 50%, 0.1)',
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    tension: 0.1
+                });
+            }
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: trainingResults.weight_history.length}, (_, i) => i),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            display: true, 
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10,
+                                font: { size: 11 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { 
+                                display: true, 
+                                text: '训练步数',
+                                font: { size: 13, weight: 'bold' }
+                            },
+                            ticks: { 
+                                maxTicksLimit: 8,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            title: { 
+                                display: true, 
+                                text: '权重值',
+                                font: { size: 13, weight: 'bold' }
+                            },
+                            ticks: { 
+                                font: { size: 10 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function drawLossChart() {
+            const ctx = document.getElementById('loss-chart').getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: trainingResults.loss_history.length}, (_, i) => i + 1),
+                    datasets: [{
+                        label: '损失值',
+                        data: trainingResults.loss_history,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            title: { 
+                                display: true, 
+                                text: '训练轮数 (Epoch)',
+                                font: { size: 13, weight: 'bold' }
+                            },
+                            ticks: { 
+                                maxTicksLimit: 8,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            title: { 
+                                display: true, 
+                                text: '损失值',
+                                font: { size: 13, weight: 'bold' }
+                            },
+                            ticks: { 
+                                font: { size: 10 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function cosineSimilarity(vectorA, vectorB) {
+            if (vectorA.length !== vectorB.length) {
+                return 0;
+            }
+            
+            let dotProduct = 0;
+            let normA = 0;
+            let normB = 0;
+            
+            for (let i = 0; i < vectorA.length; i++) {
+                dotProduct += vectorA[i] * vectorB[i];
+                normA += vectorA[i] * vectorA[i];
+                normB += vectorB[i] * vectorB[i];
+            }
+            
+            if (normA === 0 || normB === 0) {
+                return 0;
+            }
+            
+            return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+        }
+    </script>
+</body>
+</html>
